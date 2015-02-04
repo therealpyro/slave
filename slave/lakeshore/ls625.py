@@ -9,7 +9,7 @@ from slave.driver import Command, Driver
 from slave.iec60488 import IEC60488, Trigger
 from slave.types import Boolean, Enum, Integer
 
-class LS625(Driver, IEC60488, Trigger):
+class LS625(IEC60488, Trigger):
     """Provides an interface to the LS625 Superconducting magnet power
     supply.
 
@@ -189,7 +189,7 @@ class LS625(Driver, IEC60488, Trigger):
         self.limits = Command(
             'LIMIT?',
             'LIMIT',
-            [Float(min=-60.1, max=60.1), Float(min=0.1, max=5.0)
+            [Float(min=-60.1, max=60.1), Float(min=0.1, max=5.0),
              Float(min=0.0001, max=99.999)]
         )
         self.quench_params = Command(
