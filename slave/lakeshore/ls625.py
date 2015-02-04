@@ -7,7 +7,7 @@ Superconducting Magnet Power Supply.
 
 from slave.driver import Command, Driver
 from slave.iec60488 import IEC60488, Trigger
-from slave.types import Boolean, Enum, Integer
+from slave.types import Boolean, Enum, Float, Integer, Mapping, String
 
 class LS625(IEC60488, Trigger):
     """Provides an interface to the LS625 Superconducting magnet power
@@ -150,8 +150,8 @@ class LS625(IEC60488, Trigger):
             Enum(9600, 19200, 38400, 57600)                
         )
         self.ieee = Command(
-            'IEEE?'
-            'IEEE'
+            'IEEE?',
+            'IEEE',
             [Enum('\r\n', '\n\r', '\n', None),
              Enum(True, False),
              Integer(min=1, max=30)]
@@ -170,8 +170,7 @@ class LS625(IEC60488, Trigger):
              Integer(min=0, max=3)]
         )
         self.key_pressed = Command(
-            'KEYST?',
-            Enum(False, True)
+            ('KEYST?', Enum(False, True))
         )
         self.keyboard_lock = Command(
             'LOCK?',
@@ -252,20 +251,18 @@ class LS625(IEC60488, Trigger):
              Integer(min=5, max=100)]
         )
         self.ps_last_current = Command(
-            'PSHIS?',
-            Float
+            ('PSHIS?', Float)
         )
 
         # Output readings.
-        self.field = Command('RDGF?', Float)
-        self.current = Command('RDGI?', Float)
-        self.voltage_sense = Command('RDGRV?', Float)
-        self.voltage = Command('RDGV?', Float)
+        self.field = Command(('RDGF?', Float))
+        self.current = Command(('RDGI?', Float))
+        self.voltage_sense = Command(('RDGRV?', Float))
+        self.voltage = Command(('RDGV?', Float))
 
         # Error and operational status.
         self.error_status = Command(
-            'ERST?',
-            [Integer, Integer, Integer]
+            ('ERST?', [Integer, Integer, Integer])
         )
         self.error_status_enable = Command(
             'ERSTE?',
@@ -278,8 +275,7 @@ class LS625(IEC60488, Trigger):
             [Integer, Integer, Integer]
         )
         self.operational_status = Command(
-            'OPST?',
-            Integer
+            ('OPST?', Integer)
         )
         self.operational_status_enable = Command(
             'OPSTE?',
