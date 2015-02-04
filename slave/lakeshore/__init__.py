@@ -7,3 +7,4 @@ from future.builtins import *
 
 from slave.lakeshore.ls340 import LS340
 from slave.lakeshore.ls370 import LS370
+from slave.lakeshore.ls625 import LS625
