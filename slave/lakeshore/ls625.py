@@ -7,7 +7,8 @@ Superconducting Magnet Power Supply.
 
 from slave.driver import Command, Driver
 from slave.iec60488 import IEC60488, Trigger
-from slave.types import Boolean, Enum, Float, Integer, Mapping, String
+from slave.types import Boolean, Enum, Float, Integer, Mapping, \
+                        Register, String
 
 class LS625(IEC60488, Trigger):
     """Provides an interface to the LS625 Superconducting magnet power
@@ -262,31 +263,58 @@ class LS625(IEC60488, Trigger):
         self.voltage = Command(('RDGV?', Float))
 
         # Error and operational status.
+        hardware_errors = Register({
+            0: 'temperature fault',
+            1: 'low line voltage',
+            2: 'output over current',
+            3: 'output over voltage',
+            4: 'output control failure',
+            5: 'DAC processor not responding'
+        })
+        operational_errors = Register({
+            0: 'calibration error',
+            1: 'external current programm error',
+            2: 'high line voltage',
+            3: 'temperature high',
+            4: 'rempote inhibit detected',
+            5: 'magnet quench detected',
+            6: 'magnet discharging through crowbar'
+        })
+        psh_errors = Register({
+            0: 'pso short',
+            1: 'pso open'
+        })
+
         self.error_status = Command(
-            ('ERST?', [Integer, Integer, Integer])
+            ('ERST?', [hardware_errors, operational_errors, psh_errors])
         )
         self.error_status_enable = Command(
             'ERSTE?',
             'ERSTE',
-            [Integer, Integer, Integer]
+            [hardware_errors, operational_errors, psh_errors]
         )
         self.error_status_register = Command(
             'ERSTR?',
             'ERSTR',
-            [Integer, Integer, Integer]
+            [hardware_errors, operational_errors, psh_errors]
         )
+        operation_event_register = Register({
+            0: 'compliance limit',
+            1: 'ramp done',
+            2: 'psh stable'
+        })
         self.operational_status = Command(
-            ('OPST?', Integer)
+            ('OPST?', operation_event_register)
         )
         self.operational_status_enable = Command(
             'OPSTE?',
             'OPSTE',
-            Integer
+            operation_event_register
         )
         self.operational_status_register = Command(
             'OPSTR?',
             'OPSTR',
-            Integer
+            operation_event_register
         )
 
         # Trigger settings
