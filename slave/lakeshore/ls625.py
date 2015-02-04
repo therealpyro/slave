@@ -153,6 +153,7 @@ class LS625(IEC60488, Trigger):
             'IEEE?',
             'IEEE',
             [Enum('\r\n', '\n\r', '\n', None),
+             # Use enum here because True maps to 0 and False to 1.
              Enum(True, False),
              Integer(min=1, max=30)]
         )
@@ -170,7 +171,7 @@ class LS625(IEC60488, Trigger):
              Integer(min=0, max=3)]
         )
         self.key_pressed = Command(
-            ('KEYST?', Enum(False, True))
+            ('KEYST?', Boolean)
         )
         self.keyboard_lock = Command(
             'LOCK?',
@@ -194,7 +195,7 @@ class LS625(IEC60488, Trigger):
         self.quench_params = Command(
             'QNCH?',
             'QNCH',
-            [Enum(False, True),
+            [Boolean,
              Float(min=0.010, max=10.0)]
         )
         self.setpoint = Command(
@@ -222,13 +223,13 @@ class LS625(IEC60488, Trigger):
         self.rate_persistent = Command(
             'RATEP?',
             'RATEP',
-            [Enum(False, True),
+            [Boolean,
              Float(min=0.0001, max=99.999)]
         )
         self.ramp_segments_enabled = Command(
             'RSEG?',
             'RSEG',
-            Enum(False, True)
+            Boolean
         )
         self.ramp_segment = Command(
             ('RSEGS?', [Float, Float], Integer(min=1, max=5)),
@@ -246,7 +247,7 @@ class LS625(IEC60488, Trigger):
         self.ps_heater_params = Command(
             'PSHS?',
             'PSHS',
-            [Enum(False, True),
+            [Boolean,
              Integer(min=10, max=125),
              Integer(min=5, max=100)]
         )
