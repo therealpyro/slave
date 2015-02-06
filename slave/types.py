@@ -335,3 +335,42 @@ class Register(SingleType):
 
     def __repr__(self):
         return 'Register({0!r})'.format(self._map)
+
+
+class OneOf(Type):
+    """Represents a list of several type alternatives.
+    
+    The OneOf type can be used to specify a list of several type
+    alternatives. Image for example a type which can be either a Float or 
+    a mapped string::
+
+        OneOf([Float, Mapping({'foo': 'FOO', 'bar': 'BAR'})])
+
+    This type would successfully dump values of `1337.0` or `'foo'`, but
+    would fail for `'foobar'`.
+
+    .. note: When using `~.String` in the type list, make sure to put it
+        to the end of the list. Since the conversion using `str()` always
+        succeeds type conversion after the String type would not be
+        executed.
+    """
+    def __init__(self, typelist):
+        # Convert types to instances.
+        self._types = [t() if isinstance(t, type) else t for t in typelist]
+
+    def dump(self, value):
+        for t in self._types:
+            try:
+                return t.dump(value)
+            except (ValueError, TypeError):
+                pass
+        raise TypeError
+
+    def load(self, value):
+        for t in self._types:
+            try:
+                return t.load(value)
+            except (ValueError, TypeError):
+                pass
+        raise TypeError
+

@@ -7,7 +7,8 @@ from future.builtins import *
 import itertools
 import unittest
 
-from slave.types import Boolean, Integer, Float, Mapping, Register, Set
+from slave.types import Boolean, Integer, Float, Mapping, OneOf, \
+                        Register, Set, String
 
 
 class TypeCheck(object):
@@ -90,6 +91,14 @@ class TestRegister(unittest.TestCase, TypeCheck):
             2: 'third',
             3: 'fourth'
         })
+
+
+class TestOneOf(unittest.TestCase, TypeCheck):
+    def setUp(self):
+        self._values = (1337, 'up')
+        self._type = OneOf([Float, Mapping({'up': 'UP', 'down': 'DOWN'})])
+        self._serialized = (str(1337.0), 'UP')
+
 
 if __name__ == '__main__':
     unittest.main()
