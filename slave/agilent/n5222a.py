@@ -7,11 +7,102 @@ from __future__ import (absolute_import, division,
                         print_function, unicode_literals)
 from future.builtins import *
 import itertools
+import struct
+
+import logging
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 from slave.driver import Command, Driver
 from slave.iec60488 import IEC60488
 from slave.types import Boolean, Enum, Float, Integer, Mapping, \
                         Register, Set, String
+
+class BlockDataCommand(Command):
+    """ This command receives block data from the VNA.
+
+    This command can receive values as ASCII characters or as REAL,32 or
+    REAL,64 data. Use REAL,32 for measurement data and REAL,64 for
+    frequency data.
+
+    The block data format is specified as follows::
+
+        #<num_digits><byte_count><data bytes><NL><End>
+
+    where
+
+    - `'#'` marks the beginning of the block.
+    - `num_digits` specifies how many digits are contained in
+      `byte_count`.
+    - `byte_count` specifies number of bytes in the `data bytes` section.
+    - `data_bytes` represents the actual data.
+    - `<NL><End>` is always send at the end of the transmission.
+    """
+    def __init__(self, query=None, protocol=None, format='ascii'):
+        super(BlockDataCommand, self).__init__(protocol=protocol)
+        self.protocol = protocol
+        self._query = query
+        if not format in ('REAL,32', 'REAL,64', 'ASCII,0'):
+            raise ValueError("Unknown format: {0}".format(format))
+        self.format = format
+
+
+    def query(self, transport, protocol):
+        from slave.driver import _dump
+        if self.protocol:
+            self.protocol = protocol
+
+        # set format first
+        protocol.write('FORM:DATA', self.format)
+
+        if self.format == 'ASCII,0':
+            # If the format is ASCII we retrieve everything until the <NL>
+            # character and convert it to floats.
+            data = protocol.query(transport, 'CALC:DATA?', 'FDATA')
+            data = map(float, data)
+        else:
+            # If the format is REAL,32 or REAL,64 we have to receive the
+            # header first.  It consists of a "#" sign and the number of
+            # digits.
+            with transport:
+                logger.debug("BlockDataCommand query: %s", self._query)
+                transport.write(self._query)
+
+                header = transport.read_bytes(2)
+                logger.debug("BlockDataCommand header: %s", header)
+                if header[0] != '#':
+                    raise ValueError("Unknown header for block data.")
+                digits = int(header[1])
+
+                # Read number of bytes of the actual data. This number is 
+                # ASCII encoded with `digits` as number of digits.
+                byte_count = int(transport.read_bytes(digits))
+                logger.debug("BlockDataCommand byte_count: %d", byte_count)
+
+                # Now read the actual data.
+                data = transport.read_exactly(byte_count)
+                # read the <NL> sign.
+                _ = transport.read_until('\n')
+
+                # Convert data to floats again. First build format string,
+                # then use struct.unpack to unpack data from big-endian
+                # format.
+                if self.format == 'REAL,32':
+                    fmtchar = 'f'
+                    size = 4
+                else:
+                    fmtchar = 'd'
+                    size = 8
+                num_vars = byte_count / size
+                fmt = '>' + fmtchar*num_vars
+                data = list(struct.unpack(fmt, data))
+
+        return data
+
+    def __repr__(self):
+        """The BlockDataCommands representation."""
+        return '<BlockDataCommand({0},{1},{2})>'.format(self._query,
+                self.format, self.protocol)
 
 # -------------------------------------------------------------------
 # The Calculate command subsystem.
@@ -32,6 +123,12 @@ class Calculate(Driver):
                      'fahrenheit': 'FAHR', 'celsius': 'CELS'
                     })
         )
+        self.fdata = BlockDataCommand('FORM:DATA? FDATA', format='REAL,32')
+        self.x = BlockDataCommand('CALC:X?', format='REAL,64')
+
+#    @property
+#    def fdata(self):
+
 
 class CalculateParameter(Driver):
     """Implements the calculate parameter subsystem."""
@@ -39,6 +136,9 @@ class CalculateParameter(Driver):
         super(CalculateParameter, self).__init__(transport, protocol)
         self.catalog = Command(
             ('CALC:PAR:CAT:EXT?', itertools.repeat([String, String]))
+        )
+        self.selected = Command(
+            ('CALC:PAR:SEL?', String)
         )
 
     def define(self, name, param):
@@ -48,10 +148,10 @@ class CalculateParameter(Driver):
         :param param: Measurement parameter. Right now, only S-parameters
         are supported.
         """
-        #name = '"{0}"'.format(name)
-        self._write('CALC:PAR:EXT "{0}",{1}'.format(name, param))
-                    #[String, Set('S11', 'S12', 'S21', 'S22')],
-                    #name, param)
+        name = '"{0}"'.format(name)
+        self._write(('CALC:PAR:EXT',
+                    [String, Set('S11', 'S12', 'S21', 'S22')]),
+                    name, param)
 
     def select(self, name, fast=True):
         """Set the selected measurement.
@@ -60,10 +160,10 @@ class CalculateParameter(Driver):
         :param fast: If fast is set to True, the display will not be
             updated.
         """
-        name = '"{0}"'.format(name)
-        self._write('CALC:PAR:SEL',
-                    [String, Mapping({True: 'fast', False: ''})],
-                    name, fast)
+        argument = '"{0}"'.format(name)
+        if fast:
+            argument += ',fast'
+        self._write(('CALC:PAR:SEL', String), argument)
 
 # -------------------------------------------------------------------
 # The CalSet command subsystem.
@@ -124,11 +224,14 @@ class SenseCorrectionCalSet(Driver):
     """Implements the sense correction calset subsystem. """
     def __init__(self, transport, protocol):
         super(SenseCorrectionCalSet, self).__init__(transport, protocol)
-        self.activate = Command(
-            'SENS:CORR:CSET:ACT?',
-            'SENS:CORR:CSET:ACT',
-            [String, Boolean]
+        self.active = Command(
+            ('SENS:CORR:CSET:ACT?', [String, Boolean])
         )
+
+    def activate(self, calset, stimulus=True):
+        calset = '"{0}"'.format(calset)
+        self._write(('SENS:CORR:CSET:ACT', [String, Boolean]),
+                     calset, stimulus)
 
 class SenseFrequency(Driver):
     """Implements the sense frequency subsystem. """
@@ -253,3 +356,7 @@ class N5222A(IEC60488):
         self.system = System(self._transport, self._protocol)
         self.source = Source(self._transport, self._protocol)
         self.trigger = Trigger(self._transport, self._protocol)
+
+    def initiate(self):
+        self._write('INIT')
+
