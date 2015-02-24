@@ -5,6 +5,7 @@ Network Analyzer.
 """
 from __future__ import (absolute_import, division,
                         print_function, unicode_literals)
+import future
 from future.builtins import *
 import itertools
 import struct
@@ -42,7 +43,7 @@ class BlockDataCommand(Command):
         super(BlockDataCommand, self).__init__(protocol=protocol)
         self.protocol = protocol
         self._query = query
-        if not format in ('REAL,32', 'REAL,64', 'ASCII,0'):
+        if not format in ('REAL,32', 'REAL,64', 'ASC,0'):
             raise ValueError("Unknown format: {0}".format(format))
         self.format = format
 
@@ -53,14 +54,15 @@ class BlockDataCommand(Command):
             self.protocol = protocol
 
         # set format first
-        protocol.write('FORM:DATA', self.format)
+        protocol.write(transport, 'FORM:DATA', self.format)
 
-        if self.format == 'ASCII,0':
+        if self.format == 'ASC,0':
             # If the format is ASCII we retrieve everything until the <NL>
             # character and convert it to floats.
-            data = protocol.query(transport, 'CALC:DATA?', 'FDATA')
+            data = protocol.query(transport, self._query)
             data = map(float, data)
         else:
+            protocol.write(transport, self._query)
             # If the format is REAL,32 or REAL,64 we have to receive the
             # header first.  It consists of a "#" sign and the number of
             # digits.
@@ -68,21 +70,21 @@ class BlockDataCommand(Command):
                 logger.debug("BlockDataCommand query: %s", self._query)
                 transport.write(self._query)
 
-                header = transport.read_bytes(2)
-                logger.debug("BlockDataCommand header: %s", header)
-                if header[0] != '#':
+                data = transport.read_until(0x0A)
+                if data[0] != ord('#'):
                     raise ValueError("Unknown header for block data.")
-                digits = int(header[1])
+                digits = int(chr(data[1]))
+                logger.debug("BlockDataCommand digits: %d", digits)
 
                 # Read number of bytes of the actual data. This number is 
                 # ASCII encoded with `digits` as number of digits.
-                byte_count = int(transport.read_bytes(digits))
-                logger.debug("BlockDataCommand byte_count: %d", byte_count)
+                headerlength = 2+digits
+                byte_count = int((data[2:headerlength]).decode('ascii'))
+                logger.debug("BlockDataCommand byte_count: %s", byte_count)
 
                 # Now read the actual data.
-                data = transport.read_exactly(byte_count)
-                # read the <NL> sign.
-                _ = transport.read_until('\n')
+                data = data[headerlength:headerlength+byte_count]
+                print(len(data))
 
                 # Convert data to floats again. First build format string,
                 # then use struct.unpack to unpack data from big-endian
@@ -93,8 +95,10 @@ class BlockDataCommand(Command):
                 else:
                     fmtchar = 'd'
                     size = 8
-                num_vars = byte_count / size
-                fmt = '>' + fmtchar*num_vars
+                num_vars = int(byte_count / size)
+                # struct.unpack requries a string, not a unicode string and also
+                # not a future.types.newstr.newstr!
+                fmt = future.utils.native_str('>' + fmtchar*num_vars)
                 data = list(struct.unpack(fmt, data))
 
         return data
@@ -123,7 +127,7 @@ class Calculate(Driver):
                      'fahrenheit': 'FAHR', 'celsius': 'CELS'
                     })
         )
-        self.fdata = BlockDataCommand('FORM:DATA? FDATA', format='REAL,32')
+        self.fdata = BlockDataCommand('CALC:DATA? FDATA', format='REAL,32')
         self.x = BlockDataCommand('CALC:X?', format='REAL,64')
 
 #    @property
